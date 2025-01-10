@@ -10,8 +10,13 @@
     "customizations": {
         "vscode": {
             "extensions": [
-                "ms-vscode.cpptools", // C/C++ support
-                "ms-vscode.cpptools-extension-pack"
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-extension-pack",
+                "ms-vscode.cmake-tools",
+                "twxs.cmake",
+                "cschlosser.doxdocgen",
+                "eamodio.gitlens",
+                "streetsidesoftware.code-spell-checker"
             ]
         }
     },
