@@ -1,6 +1,7 @@
 FROM ubuntu:latest
 # Install essential tools
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
     g++ \
@@ -15,7 +16,6 @@ RUN apt-get update && apt-get install -y \
     net-tools \
     netcat \
     tcpdump \
-    wireshark \
     strace \
     ltrace \
     valgrind \
