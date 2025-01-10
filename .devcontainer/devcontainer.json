@@ -1,0 +1,21 @@
+{
+    "name": "Linux Programming Environment",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "forwardPorts": [
+        8080,
+        8081
+    ], // Add any ports you'll need
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools", // C/C++ support
+                "ms-vscode.cpptools-extension-pack"
+            ]
+        }
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    }
+}
