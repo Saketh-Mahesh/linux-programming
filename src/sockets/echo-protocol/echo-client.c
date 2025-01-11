@@ -25,7 +25,6 @@ int main(int argc, char *argv[])
     socklen_t addrlen;              // Length of client address structure
     struct addrinfo hints;        // Used to specify socket criteria
     struct addrinfo *result, *rp; // Will hold the address info results
-    struct sockaddr_storage claddr; // Client address structure (IPv4 or IPv6)
 
     // Initialize the hints structure to zero
     memset(&hints, 0, sizeof(struct addrinfo));
@@ -61,6 +60,9 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(result); 
 
+    // Read from Standard Input
+
+    memset(buf, 0, BUFSIZE);
     numRead = read(STDIN_FILENO, buf, BUFSIZE);
     if (numRead == -1) {
         fprintf(stderr, "Could not read from standard input\n");
@@ -72,17 +74,18 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    numReadServer = read(cfd, buf, BUFSIZE);
+    // Read from Server
+
+    memset(buf, 0, BUFSIZE);
+
+    numReadServer = read(cfd, buf, BUFSIZE - 1);
+    buf[numReadServer] = '\0';
     if (numReadServer == -1) {
         fprintf(stderr, "Could not read echo statement back from server\n");
         exit(1);
     }
 
-    /* Write the response to standard output */
-    if (write(STDOUT_FILENO, buf, numReadServer) != numReadServer) {
-        fprintf(stderr, "partial/failed write to stdout\n");
-        exit(1);
-    }  
+    printf("%s\n", buf);
 
 
     if (close(cfd) == -1) {

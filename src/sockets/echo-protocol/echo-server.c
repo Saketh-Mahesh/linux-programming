@@ -76,7 +76,6 @@ int main(int argc, char *argv[])
     // Free the address information structure
     freeaddrinfo(result);
 
-
     while (1) {
 
         addrlen = sizeof(struct sockaddr_storage);
@@ -87,7 +86,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
 
-        numRead = read(cfd, buf, BUFSIZE);
+        numRead = read(cfd, buf, BUFSIZE - 1);
         buf[numRead] = '\0';
         if (numRead > 0) {
             printf("Received: %s\n", buf);
@@ -97,7 +96,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
 
-        for (int i = 0; i < strlen(buf); i++) {
+        for (size_t i = 0; i <= strlen(buf); i++) {
             buf[i] = toupper(buf[i]);
         }
 
