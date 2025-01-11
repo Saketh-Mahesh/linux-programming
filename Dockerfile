@@ -4,19 +4,17 @@ FROM ubuntu:20.04
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update package list and install essential packages
+# Update package list and install essential development packages
 RUN apt-get update && \
     apt-get install -y \
-        ca-certificates \
-        curl \
-        vim \
+        build-essential \  
+        gdb \           
+        net-tools \ 
+        iputils-ping \      
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app
 
-# Copy project files into the container (optional)
-# COPY . /app
-
-# Default command
+# Default command to keep the container running in an interactive shell
 CMD ["/bin/bash"]
