@@ -21,35 +21,6 @@
 #define BUFSIZE 1024    // Size of buffer for data transfer
 #define BACKLOG 5           // Maximum length of pending connection queue
 
-// void readFileName(int cfd, int fd, ssize_t fileBytesRead, char *fileName, ssize_t clientBytesRead, char *buf) {
-//     memset(fileName, 0, BUFSIZE);
-//     clientBytesRead = read(cfd, fileName, BUFSIZE);
-//     if (clientBytesRead > 0) {
-//         printf("Received filename: %s\n", fileName);
-//     }
-//     // Make sure the input doesn't contain any extra characters like newline
-//     if (clientBytesRead > 0 && fileName[clientBytesRead-1] == '\n') {
-//         fileName[clientBytesRead-1] = '\0';  // Remove newline
-//     }
-// }
-
-// void readFilePath(int cfd, int fd, ssize_t fileBytesRead, char *fileName, ssize_t clientBytesRead, char *buf) {
-//     fd = open(fileName, O_RDONLY | O_SYNC);
-//     if (fd == -1) {
-//         fprintf(stderr, "Could not open the file\n");
-//         exit(1);
-//     }
-
-//     while ((fileBytesRead = read(fd, buf, BUFSIZE)) > 0) {
-//         printf("Debug - Bytes Read: {printFormat}\n", fileBytesRead);
-//         if (write(cfd, buf, BUFSIZE) == -1) {
-//             fprintf(stderr, "Could not write file contents back to client socket\n");
-//             exit(1);
-//         }
-//     }
-// }
-
-
 int main(int argc, char *argv[])
 {
     int lfd, cfd, fd;                      // Client socket file descriptor
