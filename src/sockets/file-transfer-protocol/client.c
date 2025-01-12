@@ -11,18 +11,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdbool.h>
+#include <errno.h> 
 
 
 #define PORT_NUM "8080" // Port number the client will connect to
 #define BUFSIZE 1024    // Size of buffer for data transfer
 #define BACKLOG 5           // Maximum length of pending connection queue
+#define OUTPUT_FILE "output.txt"
 
 int main(int argc, char *argv[])
 {
-    int lfd, cfd;                      // Client socket file descriptor
+    int cfd, fd;                      // Client socket file descriptor
     char buf[BUFSIZE];            // Buffer for data transfer
     ssize_t numRead, numReadServer;              // Number of bytes read
-    socklen_t addrlen;              // Length of client address structure
     struct addrinfo hints;        // Used to specify socket criteria
     struct addrinfo *result, *rp; // Will hold the address info results
 
@@ -37,8 +41,8 @@ int main(int argc, char *argv[])
     hints.ai_flags = AI_NUMERICSERV; // Port number is numeric
 
     if (getaddrinfo(argv[1], PORT_NUM, &hints, &result) != 0) {
-        fprintf(stderr, "Could not receive address info\n");
-        exit(1);
+        fprintf(stderr, "Could not receive address info %s\n", strerror(errno));
+        return -1;
     }
 
     for (rp = result; rp != NULL; rp = rp->ai_next) {
@@ -54,8 +58,8 @@ int main(int argc, char *argv[])
     }
 
     if (rp == NULL) {
-        fprintf(stderr, "Could not connect socket to any address\n");
-        exit(1);
+        fprintf(stderr, "Could not connect socket to any address %s\n", strerror(errno));
+        return -1;
     }
 
     freeaddrinfo(result); 
@@ -65,28 +69,46 @@ int main(int argc, char *argv[])
     memset(buf, 0, BUFSIZE);
     numRead = read(STDIN_FILENO, buf, BUFSIZE);
     if (numRead == -1) {
-        fprintf(stderr, "Could not read from standard input\n");
-        exit(1);
+        fprintf(stderr, "Could not read from standard input %s\n", strerror(errno));
+        return -1;
     }
+    printf("Read from standard input\n");
 
     if (write(cfd, buf, numRead) != numRead) {
-        fprintf(stderr, "Could not write to socket\n");
-        exit(1);
+        fprintf(stderr, "Could not write to socket %s\n", strerror(errno));
+        return -1;
     }
+
+    printf("Wrote the file name to the server\n");
 
     // Read from Server
 
-    memset(buf, 0, BUFSIZE);
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_TRUNC,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP |
+        S_IROTH | S_IWOTH);
 
     while ((numReadServer = read(cfd, buf, BUFSIZE)) > 0) {
-        printf("Debug - Bytes received: %ld\n", numReadServer);
-        printf("%s\n", buf);
-        memset(buf, 0, BUFSIZE);
+        printf("Received %zd bytes from server\n", numReadServer);
+        if (write(fd, buf, numReadServer) == -1) {
+            fprintf(stderr, "Could not write file contents back to client socket %s\n", strerror(errno));
+            return -1;
+        }
+        printf("Wrote %zd bytes to server\n", numReadServer);
     }
+
+    printf("Finished reading from server with status: %zd\n", numReadServer);
 
 
     if (close(cfd) == -1) {
-        fprintf(stderr, "Could not close socket\n");
-        exit(1);
+        fprintf(stderr, "Could not close socket %s\n", strerror(errno));
+        return -1;
     } 
+
+    printf("Closed the client socket\n");
+
+    if (close(fd) == -1) {
+        fprintf(stderr, "Could not close socket %s\n", strerror(errno));
+        return -1;
+    }
+    printf("Closed the file descriptor\n");
 }

@@ -13,11 +13,42 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdbool.h>
+#include <errno.h> 
 
 
 #define PORT_NUM "8080" // Port number the client will connect to
 #define BUFSIZE 1024    // Size of buffer for data transfer
 #define BACKLOG 5           // Maximum length of pending connection queue
+
+// void readFileName(int cfd, int fd, ssize_t fileBytesRead, char *fileName, ssize_t clientBytesRead, char *buf) {
+//     memset(fileName, 0, BUFSIZE);
+//     clientBytesRead = read(cfd, fileName, BUFSIZE);
+//     if (clientBytesRead > 0) {
+//         printf("Received filename: %s\n", fileName);
+//     }
+//     // Make sure the input doesn't contain any extra characters like newline
+//     if (clientBytesRead > 0 && fileName[clientBytesRead-1] == '\n') {
+//         fileName[clientBytesRead-1] = '\0';  // Remove newline
+//     }
+// }
+
+// void readFilePath(int cfd, int fd, ssize_t fileBytesRead, char *fileName, ssize_t clientBytesRead, char *buf) {
+//     fd = open(fileName, O_RDONLY | O_SYNC);
+//     if (fd == -1) {
+//         fprintf(stderr, "Could not open the file\n");
+//         exit(1);
+//     }
+
+//     while ((fileBytesRead = read(fd, buf, BUFSIZE)) > 0) {
+//         printf("Debug - Bytes Read: {printFormat}\n", fileBytesRead);
+//         if (write(cfd, buf, BUFSIZE) == -1) {
+//             fprintf(stderr, "Could not write file contents back to client socket\n");
+//             exit(1);
+//         }
+//     }
+// }
+
 
 int main(int argc, char *argv[])
 {
@@ -52,8 +83,10 @@ int main(int argc, char *argv[])
             continue;               // Try next address if socket creation failed
 
         int reuseaddr = 1;
-        if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr)) == -1)
-            fprintf(stderr, "Could not set SO_REUSEADDR option\n");
+        if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr)) == -1) {
+            fprintf(stderr, "Could not set SO_REUSEADDR option %s\n", strerror(errno));
+            return -1;
+        }
         
 
         // Try to bind the socket to the address
@@ -64,14 +97,15 @@ int main(int argc, char *argv[])
     }
 
     // Check if we failed to bind to any address
-    if (rp == NULL) {
-        fprintf(stderr, "Could not bind socket to any address\n");
-        exit(1);
+
+    if (rp == -1) {
+        fprintf(stderr, "Could not bind socket to any address %s\n", strerror(errno));
+        return -1;
     }
 
     // Mark socket as accepting connections
     if (listen(lfd, BACKLOG) == -1) {
-        fprintf(stderr, "Could not listen properly\n");
+        fprintf(stderr, "Could not listen properly %s\n", strerror(errno));
         exit(1);
     }
 
@@ -85,50 +119,73 @@ int main(int argc, char *argv[])
         // Accept a client connection
         cfd = accept(lfd, (struct sockaddr *) &claddr, &addrlen);
         if (cfd == -1) {
-            fprintf(stderr, "Could not accept connection\n");
-            exit(1);
+            fprintf(stderr, "Failed to accept connection %s\n", strerror(errno));
+            return -1;
         }
 
-        memset(fileName, 0, BUFSIZE);
+        printf("Accepted connection from client\n");
+
+        // READ FILE PATH FROM CLIENT
+
         clientBytesRead = read(cfd, fileName, BUFSIZE);
         if (clientBytesRead > 0) {
-            printf("Received filename: %s\n", fileName);
+            printf("Bytes read from client: %zd\n", clientBytesRead);
+            printf("Raw received data: ");
+            for (int i = 0; i < clientBytesRead; i++) {
+                printf("%c[%d] ", fileName[i], fileName[i]);
+            }
+            printf("\n");
         }
-
         // Make sure the input doesn't contain any extra characters like newline
         if (clientBytesRead > 0 && fileName[clientBytesRead-1] == '\n') {
             fileName[clientBytesRead-1] = '\0';  // Remove newline
         }
 
+        // READ FILE CONTENTS AND WRITE TO CLIENT
         fd = open(fileName, O_RDONLY | O_SYNC);
         if (fd == -1) {
-            fprintf(stderr, "Could not open the file\n");
-            exit(1);
+            fprintf(stderr, "Failed to open file '%s': %s\n", fileName, strerror(errno));
+            return -1;
         }
+        printf("Opened file name sent by client\n");
 
         while ((fileBytesRead = read(fd, buf, BUFSIZE)) > 0) {
-            printf("Debug - Bytes Read: %ld\n", fileBytesRead);
-            if (write(cfd, buf, BUFSIZE) == -1) {
-                fprintf(stderr, "Could not write file contents back to client socket\n");
-                exit(1);
+            printf("Read %zd bytes from file\n", fileBytesRead);
+            if (write(cfd, buf, fileBytesRead) == -1) {
+                fprintf(stderr, "Could not write file contents back to client socket %s\n", strerror(errno));
+                return -1;
             }
+            printf("Wrote %zd bytes to client\n", fileBytesRead);
+        }
+        printf("File reading loop finished with status: %zd\n", fileBytesRead);
+
+        if (fileBytesRead == -1) {
+            fprintf(stderr, "Error reading from file: %s\n", strerror(errno));
+            return -1;
         }
 
+        // close client socket
         if (close(cfd) == -1) {
-            fprintf(stderr, "Could not close client socket\n");
-            exit(1);
+            fprintf(stderr, "Could not close client socket %s\n", strerror(errno));
+            return -1;
         }
     }
-    
 
-    if (close(lfd) == -1) {
-        fprintf(stderr, "Could not close listening socket\n");
-        exit(1);
-    }
+
+    printf("Closed the client socket\n");
     
-    if (close(fd) == -1) {
-        fprintf(stderr, "Could not close file\n");
-        exit(1);
+    // close listening socket
+    if (close(lfd) == -1) {
+        fprintf(stderr, "Could not close listening socket %s\n", strerror(errno));
+        return -1;
     }
+    printf("Closed the listening socket\n");
+    
+    // close file descriptor
+    if (close(fd) == -1) {
+        fprintf(stderr, "Could not close file %s\n", strerror(errno));
+        return -1;
+    }    
+    printf("Closed the file descriptor\n");
 }
     
