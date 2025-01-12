@@ -21,15 +21,12 @@
 #define BUFSIZE 1024    // Size of buffer for data transfer
 #define BACKLOG 5           // Maximum length of pending connection queue
 
-int main(int argc, char *argv[])
-{
-    int lfd, cfd, fd;                      // Client socket file descriptor
-    char buf[BUFSIZE], fileName[BUFSIZE];            // Buffer for data transfer
-    ssize_t clientBytesRead, fileBytesRead;              // Number of bytes read
-    socklen_t addrlen;              // Length of client address structure
-    struct addrinfo hints;        // Used to specify socket criteria
-    struct addrinfo *result, *rp; // Will hold the address info results
-    struct sockaddr_storage claddr; // Client address structure (IPv4 or IPv6)
+int setup_socket(char *address) {
+
+    int lfd;         
+    struct addrinfo hints;
+    struct addrinfo *result, *rp; 
+    struct sockaddr_storage claddr;
 
     // Initialize the hints structure to zero
     memset(&hints, 0, sizeof(struct addrinfo));
@@ -42,8 +39,10 @@ int main(int argc, char *argv[])
     hints.ai_flags = AI_NUMERICSERV; // Port number is numeric
 
     // Get address information for the server (argv[1] should be server address)
-    if (getaddrinfo(argv[1], PORT_NUM, &hints, &result) != 0)
-        printf("getaddrinfo failed\n");
+    if (getaddrinfo(address, PORT_NUM, &hints, &result) != 0) {
+        fprintf(stderr, "Could not get addresss info %s\n", strerror(errno));
+        return -1;
+    }
 
     // Try each returned address until we successfully connect
     // Try each returned address until we successfully bind
@@ -59,17 +58,14 @@ int main(int argc, char *argv[])
             return -1;
         }
         
-
         // Try to bind the socket to the address
         if (bind(lfd, rp->ai_addr, rp->ai_addrlen) == 0)
             break;                  // Success - break out of loop
 
         // bind() failed - try next address
     }
-
     // Check if we failed to bind to any address
-
-    if (rp == -1) {
+    if (rp == NULL) {
         fprintf(stderr, "Could not bind socket to any address %s\n", strerror(errno));
         return -1;
     }
@@ -83,6 +79,63 @@ int main(int argc, char *argv[])
     // Free the address information structure
     freeaddrinfo(result);
 
+    return lfd;
+}
+
+
+int handle_file_transfer(int cfd) {
+
+    int fd;                      // Client socket file descriptor
+    char buf[BUFSIZE], fileName[BUFSIZE];            // Buffer for data transfer
+    ssize_t clientBytesRead, fileBytesRead;              // Number of bytes read
+
+    clientBytesRead = read(cfd, fileName, BUFSIZE);
+    if (clientBytesRead > 0) {
+        printf("Bytes read from client: %zd\n", clientBytesRead);
+        printf("Raw received data: ");
+        for (int i = 0; i < clientBytesRead; i++) {
+            printf("%c[%d] ", fileName[i], fileName[i]);
+        }
+        printf("\n");
+    }
+    // Make sure the input doesn't contain any extra characters like newline
+    if (clientBytesRead > 0 && fileName[clientBytesRead-1] == '\n') {
+        fileName[clientBytesRead-1] = '\0';  // Remove newline
+    }
+
+    // READ FILE CONTENTS AND WRITE TO CLIENT
+    fd = open(fileName, O_RDONLY | O_SYNC);
+    if (fd == -1) {
+        fprintf(stderr, "Failed to open file '%s': %s\n", fileName, strerror(errno));
+        return -1;
+    }
+    printf("Opened file name sent by client\n");
+
+    while ((fileBytesRead = read(fd, buf, BUFSIZE)) > 0) {
+        printf("Read %zd bytes from file\n", fileBytesRead);
+        if (write(cfd, buf, fileBytesRead) == -1) {
+            fprintf(stderr, "Could not write file contents back to client socket %s\n", strerror(errno));
+            return -1;
+        }
+        printf("Wrote %zd bytes to client\n", fileBytesRead);
+    }
+    printf("File reading loop finished with status: %zd\n", fileBytesRead);
+
+    if (fileBytesRead == -1) {
+        fprintf(stderr, "Error reading from file: %s\n", strerror(errno));
+        return -1;
+    }
+
+    return fd;
+}
+
+int main(int argc, char *argv[]) {
+    int cfd;
+    socklen_t addrlen;              // Length of client address structure
+    struct sockaddr_storage claddr; // Client address structure (IPv4 or IPv6)
+
+
+    int lfd = setup_socket(argv[1]);
 
     while (1) {
         
@@ -98,65 +151,32 @@ int main(int argc, char *argv[])
 
         // READ FILE PATH FROM CLIENT
 
-        clientBytesRead = read(cfd, fileName, BUFSIZE);
-        if (clientBytesRead > 0) {
-            printf("Bytes read from client: %zd\n", clientBytesRead);
-            printf("Raw received data: ");
-            for (int i = 0; i < clientBytesRead; i++) {
-                printf("%c[%d] ", fileName[i], fileName[i]);
-            }
-            printf("\n");
-        }
-        // Make sure the input doesn't contain any extra characters like newline
-        if (clientBytesRead > 0 && fileName[clientBytesRead-1] == '\n') {
-            fileName[clientBytesRead-1] = '\0';  // Remove newline
-        }
+        int fd = handle_file_transfer(cfd);
 
-        // READ FILE CONTENTS AND WRITE TO CLIENT
-        fd = open(fileName, O_RDONLY | O_SYNC);
-        if (fd == -1) {
-            fprintf(stderr, "Failed to open file '%s': %s\n", fileName, strerror(errno));
+        if (fd == -1) 
             return -1;
-        }
-        printf("Opened file name sent by client\n");
 
-        while ((fileBytesRead = read(fd, buf, BUFSIZE)) > 0) {
-            printf("Read %zd bytes from file\n", fileBytesRead);
-            if (write(cfd, buf, fileBytesRead) == -1) {
-                fprintf(stderr, "Could not write file contents back to client socket %s\n", strerror(errno));
-                return -1;
-            }
-            printf("Wrote %zd bytes to client\n", fileBytesRead);
-        }
-        printf("File reading loop finished with status: %zd\n", fileBytesRead);
-
-        if (fileBytesRead == -1) {
-            fprintf(stderr, "Error reading from file: %s\n", strerror(errno));
-            return -1;
-        }
-
-        // close client socket
+        
         if (close(cfd) == -1) {
             fprintf(stderr, "Could not close client socket %s\n", strerror(errno));
             return -1;
         }
+        printf("Closed the client socket\n");
+
+        if (close(fd) == -1) {
+            fprintf(stderr, "Could not close file %s\n", strerror(errno));
+            return -1;
+        }    
+        printf("Closed the file descriptor\n");
     }
-
-
-    printf("Closed the client socket\n");
     
-    // close listening socket
+
     if (close(lfd) == -1) {
         fprintf(stderr, "Could not close listening socket %s\n", strerror(errno));
         return -1;
     }
     printf("Closed the listening socket\n");
-    
-    // close file descriptor
-    if (close(fd) == -1) {
-        fprintf(stderr, "Could not close file %s\n", strerror(errno));
-        return -1;
-    }    
-    printf("Closed the file descriptor\n");
+
+    return 0;
 }
     
